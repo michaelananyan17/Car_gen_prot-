@@ -184,10 +184,6 @@
             color: #e74c3c;
             margin-top: 10px;
             display: none;
-            background-color: #fdf2f2;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #f5c6cb;
         }
         
         .success-message {
@@ -260,16 +256,6 @@
             color: #2c3e50;
         }
         
-        .debug-info {
-            background-color: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #6c757d;
-            display: none;
-        }
-        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -296,7 +282,6 @@
                 <input type="file" id="csv-file" class="file-input" accept=".csv">
                 <div class="file-name" id="file-name">No file selected</div>
                 <div class="instructions">CSV should have columns: car brand, car model, manufacturing year</div>
-                <div class="debug-info" id="debug-info"></div>
             </div>
             
             <div class="form-group">
@@ -380,7 +365,6 @@
         const carImage = document.getElementById('car-image');
         const imageDisplayContainer = document.getElementById('image-display-container');
         const carInfo = document.getElementById('car-info');
-        const debugInfo = document.getElementById('debug-info');
         
         // Sample car data for testing if no CSV is uploaded
         const sampleCarData = [
@@ -396,7 +380,6 @@
         
         // Initialize with sample data
         window.addEventListener('DOMContentLoaded', function() {
-            console.log("Application initialized");
             carData = sampleCarData;
             populateDropdowns();
             brandSelect.disabled = false;
@@ -407,15 +390,12 @@
                 serverUrlInput.value = savedServerUrl;
                 serverUrl = savedServerUrl;
             }
-            
-            updateDebugInfo("Application loaded with sample data");
         });
         
         // Server URL change handler
         serverUrlInput.addEventListener('change', function() {
             serverUrl = this.value.trim();
             localStorage.setItem('carGeneratorServerUrl', serverUrl);
-            updateDebugInfo(`Server URL updated to: ${serverUrl}`);
         });
         
         // File upload handling
@@ -423,23 +403,17 @@
         
         function handleFileUpload(event) {
             const file = event.target.files[0];
-            if (!file) {
-                updateDebugInfo("No file selected");
-                return;
-            }
+            if (!file) return;
             
             fileNameDisplay.textContent = file.name;
-            updateDebugInfo(`File selected: ${file.name}, size: ${file.size} bytes`);
             
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
                     const csvContent = e.target.result;
-                    updateDebugInfo(`File read successfully, length: ${csvContent.length} chars`);
                     parseCSVData(csvContent);
                 } catch (error) {
                     showError('Error parsing CSV file: ' + error.message);
-                    updateDebugInfo(`CSV parsing error: ${error.message}`);
                     // Fall back to sample data
                     carData = sampleCarData;
                     populateDropdowns();
@@ -447,7 +421,6 @@
             };
             reader.onerror = function() {
                 showError('Error reading file');
-                updateDebugInfo("File reading error");
                 // Fall back to sample data
                 carData = sampleCarData;
                 populateDropdowns();
@@ -460,13 +433,11 @@
             carData = [];
             
             // Split CSV into lines
-            const lines = csvContent.split('\n').filter(line => line.trim() !== '');
-            updateDebugInfo(`Found ${lines.length} lines in CSV`);
+            const lines = csvContent.split('\n');
             
             // Check if we have at least a header and one data row
             if (lines.length < 2) {
                 showError('CSV file must contain at least a header and one data row. Using sample data instead.');
-                updateDebugInfo("CSV has insufficient lines, using sample data");
                 carData = sampleCarData;
                 populateDropdowns();
                 return;
@@ -474,42 +445,44 @@
             
             // Parse header to find column indices
             const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-            updateDebugInfo(`CSV headers: ${headers.join(', ')}`);
-            
-            // More flexible column detection
-            const brandIndex = headers.findIndex(h => 
-                h.includes('brand') || h.includes('make') || h.includes('manufacturer')
-            );
-            const modelIndex = headers.findIndex(h => 
-                h.includes('model') || h.includes('name')
-            );
-            const yearIndex = headers.findIndex(h => 
-                h.includes('year') || h.includes('manufacturing') || h.includes('model year')
-            );
-            
-            updateDebugInfo(`Column indices - Brand: ${brandIndex}, Model: ${modelIndex}, Year: ${yearIndex}`);
+            const brandIndex = headers.findIndex(h => h.includes('brand'));
+            const modelIndex = headers.findIndex(h => h.includes('model'));
+            const yearIndex = headers.findIndex(h => h.includes('year'));
             
             if (brandIndex === -1 || modelIndex === -1 || yearIndex === -1) {
-                showError('CSV must contain columns for brand, model, and year. Using sample data instead.');
-                updateDebugInfo("Required columns not found, using sample data");
+                showError('CSV must contain columns: car brand, car model, manufacturing year. Using sample data instead.');
                 carData = sampleCarData;
                 populateDropdowns();
                 return;
             }
             
             // Parse data rows
-            let parsedCount = 0;
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
                 
-                // Improved CSV parsing that handles quoted values with commas
-                const values = parseCSVLine(line);
-                updateDebugInfo(`Line ${i} parsed into ${values.length} values: ${values.join(' | ')}`);
+                // Simple CSV parsing - split by comma but handle quoted values
+                const values = [];
+                let current = '';
+                let inQuotes = false;
                 
-                if (values.length > Math.max(brandIndex, modelIndex, yearIndex)) {
-                    const brand = values[brandIndex]?.trim();
-                    const model = values[modelIndex]?.trim();
+                for (let j = 0; j < line.length; j++) {
+                    const char = line[j];
+                    
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim().replace(/"/g, ''));
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim().replace(/"/g, ''));
+                
+                if (values.length >= Math.max(brandIndex, modelIndex, yearIndex) + 1) {
+                    const brand = values[brandIndex];
+                    const model = values[modelIndex];
                     const year = parseInt(values[yearIndex]);
                     
                     if (brand && model && !isNaN(year)) {
@@ -518,19 +491,12 @@
                             model: model.toLowerCase(),
                             year: year
                         });
-                        parsedCount++;
-                        updateDebugInfo(`Added car: ${brand} ${model} ${year}`);
-                    } else {
-                        updateDebugInfo(`Skipped invalid row: brand="${brand}", model="${model}", year="${year}"`);
                     }
                 }
             }
             
-            updateDebugInfo(`Successfully parsed ${parsedCount} cars from CSV`);
-            
             if (carData.length === 0) {
                 showError('No valid car data found in CSV. Using sample data instead.');
-                updateDebugInfo("No valid cars found, using sample data");
                 carData = sampleCarData;
             }
             
@@ -540,33 +506,6 @@
             
             // Enable brand selection
             brandSelect.disabled = false;
-            updateDebugInfo(`Data loaded successfully. Found ${carData.length} cars. Dropdowns populated.`);
-        }
-        
-        // Improved CSV line parser that handles quoted values
-        function parseCSVLine(line) {
-            const values = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    values.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            // Add the last value
-            values.push(current.trim());
-            
-            // Remove quotes from values
-            return values.map(value => value.replace(/^"(.*)"$/, '$1'));
         }
         
         function populateDropdowns() {
@@ -577,22 +516,17 @@
             
             // Get unique brands
             const brands = [...new Set(carData.map(car => car.brand))].sort();
-            updateDebugInfo(`Found ${brands.length} unique brands: ${brands.join(', ')}`);
-            
             brands.forEach(brand => {
                 const option = document.createElement('option');
                 option.value = brand;
                 option.textContent = brand.charAt(0).toUpperCase() + brand.slice(1);
                 brandSelect.appendChild(option);
             });
-            
-            updateDebugInfo("Brand dropdown populated");
         }
         
         // Brand selection handler
         brandSelect.addEventListener('change', function() {
             const selectedBrand = this.value;
-            updateDebugInfo(`Brand selected: ${selectedBrand}`);
             
             // Clear model and year dropdowns
             modelSelect.innerHTML = '<option value="">Select a model</option>';
@@ -607,8 +541,6 @@
                 .filter(car => car.brand === selectedBrand)
                 .map(car => car.model))].sort();
             
-            updateDebugInfo(`Found ${models.length} models for ${selectedBrand}: ${models.join(', ')}`);
-            
             models.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model;
@@ -617,14 +549,12 @@
             });
             
             modelSelect.disabled = false;
-            updateDebugInfo("Model dropdown populated");
         });
         
         // Model selection handler
         modelSelect.addEventListener('change', function() {
             const selectedBrand = brandSelect.value;
             const selectedModel = this.value;
-            updateDebugInfo(`Model selected: ${selectedModel} for brand: ${selectedBrand}`);
             
             // Clear year dropdown
             yearSelect.innerHTML = '<option value="">Select a year</option>';
@@ -637,8 +567,6 @@
                 .filter(car => car.brand === selectedBrand && car.model === selectedModel)
                 .map(car => car.year))].sort((a, b) => a - b);
             
-            updateDebugInfo(`Found ${years.length} years for ${selectedBrand} ${selectedModel}: ${years.join(', ')}`);
-            
             years.forEach(year => {
                 const option = document.createElement('option');
                 option.value = year;
@@ -647,19 +575,16 @@
             });
             
             yearSelect.disabled = false;
-            updateDebugInfo("Year dropdown populated");
-        });
+        }
         
         // Year selection handler
         yearSelect.addEventListener('change', function() {
-            updateDebugInfo(`Year selected: ${this.value}`);
             updateGenerateButtonState();
         });
         
         // API key submission
         submitApiKeyButton.addEventListener('click', function() {
             apiKey = apiKeyInput.value.trim();
-            updateDebugInfo("API key submission attempted");
             
             if (!apiKey) {
                 showError('Please enter your OpenAI API key');
@@ -675,7 +600,6 @@
             apiKeyMessage.style.display = 'block';
             clearError();
             updateGenerateButtonState();
-            updateDebugInfo("API key validated successfully");
         });
         
         // Generate button handler
@@ -683,22 +607,13 @@
         
         function updateGenerateButtonState() {
             const hasValidSelection = brandSelect.value && modelSelect.value && yearSelect.value;
-            const isEnabled = hasValidSelection && apiKey;
-            generateButton.disabled = !isEnabled;
-            
-            if (isEnabled) {
-                updateDebugInfo("Generate button enabled - ready to generate");
-            } else {
-                updateDebugInfo(`Generate button disabled - missing: ${!brandSelect.value ? 'brand' : ''} ${!modelSelect.value ? 'model' : ''} ${!yearSelect.value ? 'year' : ''} ${!apiKey ? 'API key' : ''}`);
-            }
+            generateButton.disabled = !(hasValidSelection && apiKey);
         }
         
         async function generateCarPhoto() {
             const brand = brandSelect.value;
             const model = modelSelect.value;
             const year = yearSelect.value;
-            
-            updateDebugInfo(`Starting generation for: ${year} ${brand} ${model}`);
             
             if (!brand || !model || !year || !apiKey) {
                 showError('Please complete all selections and provide an API key');
@@ -713,7 +628,6 @@
             
             // Prepare prompt for OpenAI API
             const prompt = `Professional press photo of a ${year} ${brand} ${model} car, studio lighting, clean background, 3/4 front view, high detail, photorealistic`;
-            updateDebugInfo(`Generated prompt: ${prompt}`);
             
             // Call our backend proxy server
             try {
@@ -721,15 +635,12 @@
             } catch (error) {
                 showError('Error generating image: ' + error.message);
                 loadingIndicator.style.display = 'none';
-                updateDebugInfo(`Generation error: ${error.message}`);
             }
         }
         
         // Function to call our backend proxy server
         async function callBackendProxy(prompt, brand, model, year) {
             try {
-                updateDebugInfo(`Calling backend at: ${serverUrl}/generate-image`);
-                
                 const response = await fetch(`${serverUrl}/generate-image`, {
                     method: 'POST',
                     headers: {
@@ -741,15 +652,12 @@
                     })
                 });
                 
-                updateDebugInfo(`Backend response status: ${response.status}`);
-                
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`Server error: ${response.status} - ${errorText}`);
                 }
                 
                 const data = await response.json();
-                updateDebugInfo(`Backend response: ${JSON.stringify(data)}`);
                 
                 if (data.error) {
                     throw new Error(data.error);
@@ -772,7 +680,6 @@
                 
                 // Hide loading indicator
                 loadingIndicator.style.display = 'none';
-                updateDebugInfo("Image generated and displayed successfully");
                 
             } catch (error) {
                 if (error.message.includes('Failed to fetch')) {
@@ -785,17 +692,10 @@
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
-            updateDebugInfo(`Error displayed: ${message}`);
         }
         
         function clearError() {
             errorMessage.style.display = 'none';
-        }
-        
-        function updateDebugInfo(message) {
-            debugInfo.textContent = `Debug: ${message}`;
-            debugInfo.style.display = 'block';
-            console.log(`Car Generator: ${message}`);
         }
         
         // Drag and drop functionality for file upload
